@@ -1,17 +1,22 @@
 package config
 
 import (
+	"errors"
 	"flag"
+	"fmt"
+	"os"
 	"time"
 
 	"github.com/xjayleex/minari-libs/queue/diskqueue"
 	"github.com/xjayleex/minari-libs/queue/memqueue"
+	scratchconfig "github.com/xjayleex/minari/lib/config"
 	"github.com/xjayleex/minari/shipper/output"
 	"github.com/xjayleex/minari/shipper/queue"
 )
 
 var (
-	cfgFilePath string
+	cfgFilePath       string
+	ErrConfigIsNotSet = errors.New("config file is not set")
 )
 
 func init() {
@@ -44,10 +49,41 @@ type ShipperTLS struct {
 
 func FromConfigFile() (ShipperRootConfig, error) {
 	// TODO: impl unpack cfg from config file with resolved cfg file path.
-	return DefaultFromConfigFile()
+	if cfgFilePath == "" {
+		return ShipperRootConfig{}, ErrConfigIsNotSet
+	}
+
+	contents, err := os.ReadFile(cfgFilePath)
+
+	if err != nil {
+		return ShipperRootConfig{}, fmt.Errorf("error reading input file %s: %w", cfgFilePath, err)
+	}
+
+	raw, err := scratchconfig.NewConfigWithYAML(contents, "")
+	if err != nil {
+		return ShipperRootConfig{}, fmt.Errorf("error reading config from yaml: %w", err)
+	}
+
+	unpacker := func(cfg *ShipperRootConfig) error {
+		return raw.Unpack(cfg)
+	}
+
+	return readConfig(unpacker)
 }
 
-func DefaultFromConfigFile() (ShipperRootConfig, error) {
+type rawUnpacker func(cfg *ShipperRootConfig) error
+
+func readConfig(unpacker rawUnpacker) (cfg ShipperRootConfig, err error) {
+	cfg = DefaultConfig()
+	err = unpacker(&cfg)
+	if err != nil {
+		return cfg, fmt.Errorf("error unpacking shipper config: %w", err)
+	}
+
+	return cfg, nil
+}
+
+func DefaultConfig() ShipperRootConfig {
 	return ShipperRootConfig{
 		Type: "default-config",
 		Shipper: ShipperConfig{
@@ -76,5 +112,5 @@ func DefaultFromConfigFile() (ShipperRootConfig, error) {
 				},
 			},
 		},
-	}, nil
+	}
 }
