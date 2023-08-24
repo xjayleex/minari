@@ -42,9 +42,10 @@ type ShipperConnectionConfig struct {
 }
 
 type ShipperTLS struct {
-	CAs  []string `config:"certificate_authorities"`
-	Cert string   `config:"certificate"`
-	Key  string   `config:"Key"`
+	Strict bool     `config:"strict"`
+	CAs    []string `config:"certificate_authorities"`
+	Cert   string   `config:"certificate"`
+	Key    string   `config:"Key"`
 }
 
 func FromConfigFile() (ShipperRootConfig, error) {
