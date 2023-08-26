@@ -1,11 +1,17 @@
 package datasource
 
-type MockDataSource struct{}
+func init() {
+	//TODO: datasource.Register("mock-source", makeMockSource )
+}
 
-func (s *MockDataSource) Start() error {
+// func makeMockSource() *MockSource {}
+
+type MockSource struct{}
+
+func (s *MockSource) Start() error {
 	return nil
 }
 
-func (s *MockDataSource) Stop() error {
+func (s *MockSource) Stop() error {
 	return nil
 }
