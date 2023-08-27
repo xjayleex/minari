@@ -17,19 +17,6 @@ const (
 	DialTimeout = time.Second * 60
 )
 
-/*
-func shipperCreds(c shipperconfig.ShipperConnectionConfig) (credentials.TransportCredentials, error) {
-	if c.TLS.Cert == "" {
-		return insecure.NewCredentials(), nil
-	}
-	creds, err := credentials.NewServerTLSFromFile(c.TLS.Cert, c.TLS.Key)
-
-	if err != nil && !c.TLS.Strict {
-		return insecure.NewCredentials(), nil
-	}
-	return creds, err
-} */
-
 type shipper struct {
 	cfg shipperconfig.ShipperRootConfig
 
