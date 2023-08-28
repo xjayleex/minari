@@ -26,10 +26,6 @@ type shipper struct {
 	observer Observer
 }
 
-func makeShipper() {
-	//FIXME:
-}
-
 var transfomer = toShipperEvent
 
 func (s *shipper) Connect() error {
