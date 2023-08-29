@@ -25,7 +25,27 @@ func init() {
 
 type ShipperRootConfig struct {
 	Type    string        `config:"type"`
+	Client  ClientConfig  `config:"client"`
 	Shipper ShipperConfig `config:"shipper"`
+}
+
+type ClientConfig struct {
+	// Server string
+	// TLS
+
+	// Timeout of a single batch publishing request
+	Timeout time.Duration `config:"timeout"`
+	// MaxRetries is how many the same batch is attempted to be sent
+	MaxRetries int `config:"max_retries"`
+	// max amount of events in a single batch
+	BulkMaxSize        int           `config:"bulk_max_size"`
+	AckPollingInterval time.Duration `config:"ack_polling_interval"`
+	BackOff            backoffConfig `config:"backoff"`
+}
+
+type backoffConfig struct {
+	Init time.Duration `config:"init"`
+	Max  time.Duration `config:"max"`
 }
 
 type ShipperConfig struct {
