@@ -16,6 +16,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 const (
@@ -184,6 +185,87 @@ func (s *shipper) Close() error {
 	s.conn = nil
 	s.client = nil
 	return err
+}
+
+func (s *shipper) startACKLoop() error {
+	ctx, cancel := context.WithCancel(context.Background())
+	s.ackCancel = cancel
+	indexClient, err := s.client.PersistedIndex(ctx, &messages.PersistedIndexRequest{
+		PollingInterval: durationpb.New(s.cfg.Client.AckPollingInterval),
+	})
+
+	if err != nil {
+		return fmt.Errorf("faield to connect to the server: %w", err)
+	}
+
+	indexReply, err := indexClient.Recv()
+	if err != nil {
+		return fmt.Errorf("failed to fetch server information: %w", err)
+	}
+	s.uuid = indexReply.GetUuid()
+
+	s.logger.Debugf("connection to %s (%s) established", s.cfg.Shipper.ShipperConn.Server)
+
+	s.ackClient = indexClient
+	s.ackBatchChan = make(chan pendingBatch)
+	s.ackIndexChan = make(chan uint64)
+	s.ackWaitGroup.Add(2)
+
+	go func() {
+		s.ackWorker(ctx)
+		s.ackWaitGroup.Done()
+	}()
+
+	go func() {
+		err := s.ackListener(ctx)
+		s.ackWaitGroup.Done()
+		if err != nil {
+			s.logger.Errorf("acks listener stopped: %w", err)
+			s.Close()
+		}
+	}()
+
+	return nil
+}
+
+// listens for newly published batches awaiting acknowledgment,
+// and for new persisted indexes that should be forwarded to already-published
+// batches.
+func (s *shipper) ackWorker(ctx context.Context) {
+	s.logger.Debugf("starting ack loop with server %s", s.uuid)
+
+	pel := []pendingBatch{}
+	for {
+		select {
+		case <-ctx.Done():
+			for _, p := range pel {
+				p.batch.Cancelled()
+			}
+			return
+		case newBatch := <-s.ackBatchChan:
+			pel = append(pel, newBatch)
+		case newIndex := <-s.ackIndexChan:
+			lastProcessed := 0
+			for _, p := range pel {
+				if p.index > newIndex {
+					break
+				}
+
+				p.batch.ACK()
+				ackedCount := p.eventCount - p.droppedCount
+				s.observer.Acked(ackedCount)
+				s.logger.Debugf("%d events have been acknowledged, %d dropped", ackedCount, p.droppedCount)
+				lastProcessed += 1
+			}
+
+			if lastProcessed != 0 {
+				remaining := len(pel) - lastProcessed
+				copy(pel[0:], pel[lastProcessed:])
+				// adjust pending list length to 'remaining'
+				pel = pel[:remaining]
+			}
+		}
+	}
 }
 
 func toShipperEvent(e datasource.Event) (*messages.Event, error) {
