@@ -82,8 +82,7 @@ func (s *shipper) Connect() error {
 
 	s.client = pb.NewProducerClient(s.conn)
 
-	//FIXME:
-	return nil
+	return s.startACKLoop()
 }
 
 func (s *shipper) Publish(ctx context.Context, batch Batch) error {
