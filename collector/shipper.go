@@ -268,6 +268,29 @@ func (s *shipper) ackWorker(ctx context.Context) {
 	}
 }
 
+// the only job of this loop is to listen to the persisted index RPC stream
+// and forward its value to the ack worker.
+func (s *shipper) ackListener(ctx context.Context) error {
+	s.logger.Debugf("starting ack listener loop with server %s", s.uuid)
+
+	for {
+		indexReply, err := s.ackClient.Recv()
+		if err != nil {
+			select {
+			case <-ctx.Done():
+				// If out context has been closed, this is an intentional closed
+				// connection, so return no error.
+				return nil
+			default:
+				// If the context itself is not closed then this means a real
+				// connection error.
+				return fmt.Errorf("ack listener closed connection: %w", err)
+			}
+		}
+		s.ackIndexChan <- indexReply.PersistedIndex
+	}
+}
+
 func toShipperEvent(e datasource.Event) (*messages.Event, error) {
 	return nil, errors.New("TODO:")
 }
