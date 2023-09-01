@@ -10,6 +10,7 @@ import (
 	pb "github.com/xjayleex/minari-libs/api/proto/grpc"
 	"github.com/xjayleex/minari-libs/api/proto/messages"
 	"github.com/xjayleex/minari-libs/logpack"
+	"github.com/xjayleex/minari-libs/thirdparty/helpers"
 	"github.com/xjayleex/minari/collector/datasource"
 	server "github.com/xjayleex/minari/shipper"
 	shipperconfig "github.com/xjayleex/minari/shipper/config"
@@ -17,6 +18,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -290,8 +292,60 @@ func (s *shipper) ackListener(ctx context.Context) error {
 	}
 }
 
+var InvalidTypedEvent = errors.New("invalid event data type")
+
 func toShipperEvent(e datasource.Event) (*messages.Event, error) {
-	return nil, errors.New("TODO:")
+	meta, err := helpers.NewValue(e.Meta)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert event meta to protobuf: %w", err)
+	}
+
+	source := &messages.Source{}
+	datastream := &messages.DataStream{}
+
+	inputIdVal, err := e.Meta.GetValue("input_id")
+	if err == nil {
+		source.InputId, _ = inputIdVal.(string)
+	}
+
+	streamIdVal, err := e.Meta.GetValue("stream_id")
+	if err == nil {
+		source.StreamId, _ = streamIdVal.(string)
+	}
+
+	dsType, err := e.Meta.GetValue("data_stream.type")
+	if err == nil {
+		datastream.Type, _ = dsType.(string)
+	}
+
+	dsNamespace, err := e.Meta.GetValue("data_stream.namespace")
+	if err == nil {
+		datastream.Namespace, _ = dsNamespace.(string)
+	}
+
+	dsDataset, err := e.Meta.GetValue("data_stream.dataset")
+	if err == nil {
+		datastream.Dataset, _ = dsDataset.(string)
+	}
+
+	m := &messages.Event{
+		Timestamp:  timestamppb.New(e.Timestamp),
+		Metadata:   meta.GetStructValue(),
+		Source:     source,
+		DataStream: datastream,
+	}
+
+	if binary, ok := e.TypedEvent.(*messages.Event_Binary); ok {
+		m.TypedEvent = binary
+	} else {
+		if fields, ok := e.TypedEvent.(*messages.Event_Fields); ok {
+			m.TypedEvent = fields
+		} else {
+			return nil, InvalidTypedEvent
+		}
+	}
+
+	return m, nil
 }
 
 type pendingBatch struct {
