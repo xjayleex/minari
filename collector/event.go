@@ -25,3 +25,32 @@ type batch []datasource.Event
 func (b batch) Events() []datasource.Event {
 	return ([]datasource.Event)(b)
 }
+
+func (b batch) ACK() {
+	panic("not implemented") // TODO: Implement
+}
+
+func (b batch) Drop() {
+	panic("not implemented") // TODO: Implement
+}
+
+func (b batch) Retry() {
+	panic("not implemented") // TODO: Implement
+}
+
+func (b batch) RetryEvents(events []datasource.Event) {
+	panic("not implemented") // TODO: Implement
+}
+
+func (b batch) SplitRetry() bool {
+	panic("not implemented") // TODO: Implement
+}
+
+func (b batch) FreeEntries() {
+	panic("not implemented") // TODO: Implement
+}
+
+// Send was aborted, try again but don't decrease the batch's TTL counter.
+func (b batch) Cancelled() {
+	panic("not implemented") // TODO: Implement
+}
