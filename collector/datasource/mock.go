@@ -7,12 +7,12 @@ import (
 )
 
 func init() {
-	//TODO: datasource.Register("mock-source", makeMockSource )
 	RegisterType("mock", makeMockSource)
 }
 
 func makeMockSource() (DataSource, error) {
-	return &MockSource{}, errors.New("FIXME: unimplemented")
+	src := &MockSource{}
+	return src, errors.New("FIXME: unimplemented")
 }
 
 type MockSource struct {
