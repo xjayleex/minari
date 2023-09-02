@@ -13,3 +13,8 @@ type Event struct {
 	TimeSeries bool
 	TypedEvent interface{}
 }
+
+type OutputMeta struct {
+	Extension    string
+	CompressType uint8
+}
