@@ -24,7 +24,7 @@ func FromConfig(config Config) (DataSource, error) {
 	return nil, fmt.Errorf("unimplemented data source type %s", config.Type)
 }
 
-type Factory func() (DataSource, error)
+type Factory func(config *Config) (DataSource, error)
 
 func FindFactory(name string) Factory {
 	return sourceReg[name]
@@ -36,4 +36,12 @@ func RegisterType(name string, f Factory) {
 		panic(fmt.Errorf("data source type %s exists already", name))
 	}
 	sourceReg[name] = f
+}
+
+func Load(name string, config *Config) (DataSource, error) {
+	factory := FindFactory(name)
+	if factory == nil {
+		return nil, fmt.Errorf("output type %s undefined", name)
+	}
+	return factory(config)
 }

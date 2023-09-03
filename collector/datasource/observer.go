@@ -1,4 +1,4 @@
-package collector
+package datasource
 
 type Observer interface {
 	NewBatch(int)     // report new batch being processed with number of events
