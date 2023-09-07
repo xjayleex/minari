@@ -2,27 +2,26 @@ package collector
 
 import (
 	"context"
+	"errors"
+	"sync"
 
-	pb "github.com/xjayleex/minari-libs/api/proto/grpc"
 	"github.com/xjayleex/minari-libs/api/proto/messages"
 
 	"github.com/xjayleex/minari-libs/logpack"
-	"github.com/xjayleex/minari/collector/datasource"
-	shipperserver "github.com/xjayleex/minari/shipper"
-	shipperconfig "github.com/xjayleex/minari/shipper/config"
-	"google.golang.org/grpc"
+	"github.com/xjayleex/minari/collector/source"
+	"github.com/xjayleex/minari/lib/config"
 )
 
 type Collector struct {
 	logger logpack.Logger
 	cfg    Config
 
-	Source datasource.DataSource
+	Source source.DataSource
 }
 
 type Config struct {
-	ShipperConfig shipperconfig.ShipperRootConfig
-	SourceConfig  datasource.Config
+	SourceConfig  *config.C
+	ShipperConfig *config.C
 }
 
 func NewCollector(config Config, logger logpack.Logger) *Collector {
@@ -39,42 +38,63 @@ func NewCollector(config Config, logger logpack.Logger) *Collector {
 }
 
 func (c *Collector) Run(ctx context.Context) error {
-	source, err := datasource.FromConfig(c.cfg.SourceConfig)
-
-	creds, err := shipperserver.Creds(c.cfg.ShipperConfig.Shipper.ShipperConn)
-	if err != nil {
-		return err
-	}
-	conn, err := grpc.DialContext(
-		ctx,
-		c.cfg.ShipperConfig.Shipper.ShipperConn.Server,
-		grpc.WithTransportCredentials(creds),
-	)
-
+	source, err := source.Load("", nil, c.cfg.SourceConfig)
 	if err != nil {
 		return err
 	}
 
-	shipper := pb.NewProducerClient(conn)
-	ech := make(chan messages.Event, 1)
-
-	mediator := mediator{
-		shipper: shipper,
-		ech:     ech,
+	shipper, err := newShipper(c.cfg.ShipperConfig)
+	if err != nil {
+		return err
 	}
 
+	err = shipper.Connect()
+	if err != nil {
+		return err
+	}
+
+	wg := sync.WaitGroup{}
+
+	eventChan := make(chan *messages.Event, 1)
+	runnerLoop := runner{
+		client: shipper,
+	}
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err = runnerLoop.Run(ctx, eventChan)
+		if err != nil {
+			c.logger.Debugf("Collector; runnerLoop err ; %w", err)
+		} else {
+			c.logger.Debugf("Collecotor; runnerLoop is done.")
+		}
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		source.Run(eventChan)
+	}()
+
+	wg.Wait()
+
+	return errors.New("")
 }
 
-type mediator struct {
-	shipper pb.ProducerClient
-	ech     chan messages.Event
+type runner struct {
+	client *shipper
+	// eventChan <-chan *messages.Event
 }
 
-type loopRunner struct {
-	client pb.ProducerClient
-	ech    <-chan *messages.Event
-}
-
-func (l *loopRunner) Run() error {
+func (l *runner) Run(ctx context.Context, eventChan <-chan *messages.Event) error {
+	// l.eventChan = eventChan
+	for {
+		//TODO:
+		select {
+		case event := <-eventChan:
+		case <-ctx.Done():
+		}
+	}
 	return nil
 }

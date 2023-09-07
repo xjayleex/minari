@@ -1,4 +1,4 @@
-package datasource
+package source
 
 type Observer interface {
 	NewBatch(int)     // report new batch being processed with number of events
@@ -16,6 +16,10 @@ type Observer interface {
 }
 
 var nilObserver = (*emptyObserver)(nil)
+
+func NewNilObserver() Observer {
+	return nilObserver
+}
 
 type emptyObserver struct{}
 

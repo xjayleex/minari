@@ -12,10 +12,10 @@ import (
 	"github.com/xjayleex/minari-libs/logpack"
 	"github.com/xjayleex/minari-libs/thirdparty/helpers"
 	"github.com/xjayleex/minari/collector/datasource"
-	server "github.com/xjayleex/minari/shipper"
-	shipperconfig "github.com/xjayleex/minari/shipper/config"
+	"github.com/xjayleex/minari/lib/config"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -25,11 +25,43 @@ const (
 	DialTimeout = time.Second * 60
 )
 
+type shipperClientConfig struct {
+	Server string
+	// TLS
+	// Timeout of a single batch publishing request
+	Timeout time.Duration `config:"timeout"`
+	// MaxRetries is how many the same batch is attempted to be sent
+	MaxRetries int `config:"max_retries"`
+	// max amount of events in a single batch
+	BulkMaxSize        int           `config:"bulk_max_size"`
+	AckPollingInterval time.Duration `config:"ack_polling_interval"`
+	BackOff            backoffConfig `config:"backoff"`
+}
+
+type backoffConfig struct {
+	Init time.Duration `config:"init"`
+	Max  time.Duration `config:"max"`
+}
+
+func defaultShipperClientConfig() shipperClientConfig {
+	return shipperClientConfig{
+		Server:             "",
+		Timeout:            30 * time.Second,
+		MaxRetries:         3,
+		BulkMaxSize:        50,
+		AckPollingInterval: 5 * time.Millisecond,
+		BackOff: backoffConfig{
+			Init: 1 * time.Second,
+			Max:  60 * time.Second,
+		},
+	}
+}
+
 type shipper struct {
-	cfg shipperconfig.ShipperRootConfig
+	cfg shipperClientConfig
 
 	logger   logpack.Logger
-	observer Observer
+	observer datasource.Observer
 
 	uuid string
 
@@ -54,13 +86,29 @@ type shipper struct {
 	ackCancel context.CancelFunc
 }
 
+func newShipper(cfg *config.C) (*shipper, error) {
+	logger, err := logpack.NewLogger("shipper-client")
+	if err != nil {
+		return nil, err
+	}
+
+	conf := defaultShipperClientConfig()
+	err = cfg.Unpack(&conf)
+	if err != nil {
+		return nil, err
+	}
+
+	s := &shipper{
+		logger: logger,
+		cfg:    conf,
+	}
+	return s, nil
+}
+
 var converter = toShipperEvent
 
 func (s *shipper) Connect() error {
-	creds, err := server.Creds(s.cfg.Shipper.ShipperConn)
-	if err != nil {
-		return err
-	}
+	creds := insecure.NewCredentials()
 
 	opts := []grpc.DialOption{
 		grpc.WithConnectParams(grpc.ConnectParams{
@@ -73,14 +121,16 @@ func (s *shipper) Connect() error {
 	ctx, cancel := context.WithTimeout(context.Background(), DialTimeout)
 	defer cancel()
 
-	s.conn, err = grpc.DialContext(
+	conn, err := grpc.DialContext(
 		ctx,
-		s.cfg.Shipper.ShipperConn.Server, opts...,
+		s.cfg.Server, opts...,
 	)
 
 	if err != nil {
 		return err
 	}
+
+	s.conn = conn
 
 	s.client = pb.NewProducerClient(s.conn)
 
@@ -125,7 +175,7 @@ func (s *shipper) publish(ctx context.Context, batch Batch) error {
 
 	var lastAcceptedIndex uint64
 
-	ctx, cancel := context.WithTimeout(ctx, s.cfg.Client.Timeout)
+	ctx, cancel := context.WithTimeout(ctx, s.cfg.Timeout)
 	defer cancel()
 
 	for len(toSend) > 0 {
@@ -192,7 +242,7 @@ func (s *shipper) startACKLoop() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	s.ackCancel = cancel
 	indexClient, err := s.client.PersistedIndex(ctx, &messages.PersistedIndexRequest{
-		PollingInterval: durationpb.New(s.cfg.Client.AckPollingInterval),
+		PollingInterval: durationpb.New(s.cfg.AckPollingInterval),
 	})
 
 	if err != nil {
@@ -205,7 +255,7 @@ func (s *shipper) startACKLoop() error {
 	}
 	s.uuid = indexReply.GetUuid()
 
-	s.logger.Debugf("connection to %s (%s) established", s.cfg.Shipper.ShipperConn.Server)
+	s.logger.Debugf("connection to %s (%s) established", s.cfg.Server)
 
 	s.ackClient = indexClient
 	s.ackBatchChan = make(chan pendingBatch)

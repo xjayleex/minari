@@ -1,30 +1,20 @@
-package datasource
+package source
 
 import (
 	"fmt"
 
 	"github.com/xjayleex/minari-libs/api/proto/messages"
+	"github.com/xjayleex/minari/lib/config"
 )
 
 var sourceReg = map[string]Factory{}
 
 type DataSource interface {
-	Run(eventChan chan<- messages.Event) error
+	Run(eventChan chan<- *messages.Event) error
 	Stop() error
 }
 
-type Config struct {
-	Type string
-}
-
-func FromConfig(config Config) (DataSource, error) {
-	if config.Type == "mock" {
-		return &MockSource{}, nil
-	}
-	return nil, fmt.Errorf("unimplemented data source type %s", config.Type)
-}
-
-type Factory func(config *Config) (DataSource, error)
+type Factory func(cfg *config.C, stats Observer) (DataSource, error)
 
 func FindFactory(name string) Factory {
 	return sourceReg[name]
@@ -38,10 +28,16 @@ func RegisterType(name string, f Factory) {
 	sourceReg[name] = f
 }
 
-func Load(name string, config *Config) (DataSource, error) {
+func Load(name string, stats Observer, cfg *config.C) (DataSource, error) {
 	factory := FindFactory(name)
 	if factory == nil {
 		return nil, fmt.Errorf("output type %s undefined", name)
 	}
-	return factory(config)
+
+	if stats == nil {
+		// TODO: NilObserver
+		stats = NewNilObserver()
+
+	}
+	return factory(cfg, stats)
 }
