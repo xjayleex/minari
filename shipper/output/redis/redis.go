@@ -13,7 +13,7 @@ func makeRedisStream(config Config) (*Client, error) {
 }
 
 type Config struct {
-	Consumer ConsumerConfig `config: "consumer"`
+	Consumer ConsumerConfig `config:"consumer"`
 }
 
 type RedisStreamOutput struct {
