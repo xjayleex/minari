@@ -15,7 +15,7 @@ type S3Output struct {
 }
 
 func NewS3Output(config *Config, queue *queue.Queue) *S3Output {
-	logger, err := logpack.NewLogger("ceph-output")
+	logger, err := logpack.NewLogger("s3compat-output")
 	if err != nil {
 		logger = logpack.G()
 	}
