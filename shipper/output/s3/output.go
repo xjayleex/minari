@@ -1,7 +1,6 @@
 package s3
 
 import (
-	"errors"
 	"sync"
 
 	"github.com/xjayleex/minari-libs/logpack"
@@ -34,5 +33,10 @@ func (out *S3Output) Start() error {
 
 		}
 	}()
-	return errors.New("TODO:")
+
+	return nil
+}
+
+func (out *S3Output) WaitClose() {
+	out.wg.Wait()
 }
