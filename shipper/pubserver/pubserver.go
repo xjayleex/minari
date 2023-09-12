@@ -10,6 +10,7 @@ import (
 	"github.com/xjayleex/minari-libs/logpack"
 	"github.com/xjayleex/minari/shipper/config"
 	"github.com/xjayleex/minari/shipper/output"
+	"github.com/xjayleex/minari/shipper/output/s3"
 	"github.com/xjayleex/minari/shipper/queue"
 )
 
@@ -18,8 +19,13 @@ type Output interface {
 	WaitClose()
 }
 
-func OutputFromConfig(cfg output.Config, q *queue.Queue) (Output, error) {
-	if cfg.Console != nil {
+// Output Factory
+// priority : S3, Console
+func OutputFromConfig(config output.Config, q *queue.Queue) (Output, error) {
+	if config.S3 != nil {
+		return s3.NewS3Output(config.S3, q), nil
+	}
+	if config.Console != nil {
 		return output.NewConsoleOutput(q), nil
 	}
 
