@@ -11,12 +11,12 @@ type Client struct {
 	compat *minio.Client
 }
 
-func makeS3Client(config *Config) (*Client, error) {
+func makeS3Client(config Config) (*Client, error) {
 	c, err := newMinioClient(config)
 	return c, err
 }
 
-func newMinioClient(config *Config) (*Client, error) {
+func newMinioClient(config Config) (*Client, error) {
 	creds := credentials.NewStaticV4(config.KeyPairs[0].Access, config.KeyPairs[0].Secret, "")
 	compat, err := minio.New(config.Endpoint, &minio.Options{
 		Creds:  creds,
