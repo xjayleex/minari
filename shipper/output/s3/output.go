@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/xjayleex/minari-libs/api/proto/messages"
 	"github.com/xjayleex/minari-libs/logpack"
 	"github.com/xjayleex/minari/shipper/queue"
 )
@@ -29,7 +30,8 @@ func NewS3Output(config *Config, queue *queue.Queue) *S3Output {
 }
 
 func (out *S3Output) Start() error {
-	client, err := makeS3Client(*out.config)
+	q := out.queue
+	s3, err := makeS3Client(*out.config)
 	if err != nil {
 		return fmt.Errorf("error creating s3-compat storage client %w", err)
 	}
@@ -38,11 +40,21 @@ func (out *S3Output) Start() error {
 	go func() {
 		defer out.wg.Done()
 		for {
+			batch, err := q.Get(10)
+			if err != nil {
+				//TODO:
+			}
+			events := batch.Events()
 
 		}
 	}()
 
 	return nil
+}
+
+func (out *S3Output) targetBucketEvents(event *messages.Event) string {
+	// TODO: bucket naming convention from event meta
+	return "fixme"
 }
 
 func (out *S3Output) WaitClose() {
