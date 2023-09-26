@@ -11,7 +11,7 @@ import (
 	"github.com/xjayleex/minari-libs/api/proto/messages"
 	"github.com/xjayleex/minari-libs/logpack"
 	"github.com/xjayleex/minari-libs/thirdparty/helpers"
-	"github.com/xjayleex/minari/collector/datasource"
+	"github.com/xjayleex/minari/collector/source"
 	"github.com/xjayleex/minari/lib/config"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -61,7 +61,7 @@ type shipper struct {
 	cfg shipperClientConfig
 
 	logger   logpack.Logger
-	observer datasource.Observer
+	observer source.Observer
 
 	uuid string
 
@@ -137,7 +137,7 @@ func (s *shipper) Connect() error {
 	return s.startACKLoop()
 }
 
-func (s *shipper) Publish(ctx context.Context, batch Batch) error {
+func (s *shipper) Publish(ctx context.Context, batch source.Batch) error {
 	err := s.publish(ctx, batch)
 	if err != nil {
 		s.Close()
@@ -145,7 +145,7 @@ func (s *shipper) Publish(ctx context.Context, batch Batch) error {
 	return err
 }
 
-func (s *shipper) publish(ctx context.Context, batch Batch) error {
+func (s *shipper) publish(ctx context.Context, batch source.Batch) error {
 	if s.conn == nil {
 		return errors.New("connection is not established")
 	}
@@ -344,8 +344,8 @@ func (s *shipper) ackListener(ctx context.Context) error {
 
 var InvalidTypedEvent = errors.New("invalid event data type")
 
-func toShipperEvent(e datasource.Event) (*messages.Event, error) {
-	meta, err := helpers.NewValue(e.Meta)
+func toShipperEvent(event source.Event) (*messages.Event, error) {
+	meta, err := helpers.NewValue(event.Meta)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert event meta to protobuf: %w", err)
 	}
@@ -353,42 +353,42 @@ func toShipperEvent(e datasource.Event) (*messages.Event, error) {
 	source := &messages.Source{}
 	datastream := &messages.DataStream{}
 
-	inputIdVal, err := e.Meta.GetValue("input_id")
+	inputIdVal, err := event.Meta.GetValue("input_id")
 	if err == nil {
 		source.InputId, _ = inputIdVal.(string)
 	}
 
-	streamIdVal, err := e.Meta.GetValue("stream_id")
+	streamIdVal, err := event.Meta.GetValue("stream_id")
 	if err == nil {
 		source.StreamId, _ = streamIdVal.(string)
 	}
 
-	dsType, err := e.Meta.GetValue("data_stream.type")
+	dsType, err := event.Meta.GetValue("data_stream.type")
 	if err == nil {
 		datastream.Type, _ = dsType.(string)
 	}
 
-	dsNamespace, err := e.Meta.GetValue("data_stream.namespace")
+	dsNamespace, err := event.Meta.GetValue("data_stream.namespace")
 	if err == nil {
 		datastream.Namespace, _ = dsNamespace.(string)
 	}
 
-	dsDataset, err := e.Meta.GetValue("data_stream.dataset")
+	dsDataset, err := event.Meta.GetValue("data_stream.dataset")
 	if err == nil {
 		datastream.Dataset, _ = dsDataset.(string)
 	}
 
 	m := &messages.Event{
-		Timestamp:  timestamppb.New(e.Timestamp),
+		Timestamp:  timestamppb.New(event.Timestamp),
 		Metadata:   meta.GetStructValue(),
 		Source:     source,
 		DataStream: datastream,
 	}
 
-	if binary, ok := e.TypedEvent.(*messages.Event_Binary); ok {
+	if binary, ok := event.TypedEvent.(*messages.Event_Binary); ok {
 		m.TypedEvent = binary
 	} else {
-		if fields, ok := e.TypedEvent.(*messages.Event_Fields); ok {
+		if fields, ok := event.TypedEvent.(*messages.Event_Fields); ok {
 			m.TypedEvent = fields
 		} else {
 			return nil, InvalidTypedEvent
@@ -399,7 +399,7 @@ func toShipperEvent(e datasource.Event) (*messages.Event, error) {
 }
 
 type pendingBatch struct {
-	batch        Batch
+	batch        source.Batch
 	index        uint64
 	eventCount   int
 	droppedCount int

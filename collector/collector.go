@@ -5,8 +5,6 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/xjayleex/minari-libs/api/proto/messages"
-
 	"github.com/xjayleex/minari-libs/logpack"
 	"github.com/xjayleex/minari/collector/source"
 	"github.com/xjayleex/minari/lib/config"
@@ -38,7 +36,7 @@ func NewCollector(config Config, logger logpack.Logger) *Collector {
 }
 
 func (c *Collector) Run(ctx context.Context) error {
-	source, err := source.Load("", nil, c.cfg.SourceConfig)
+	src, err := source.Load("", nil, c.cfg.SourceConfig)
 	if err != nil {
 		return err
 	}
@@ -54,8 +52,7 @@ func (c *Collector) Run(ctx context.Context) error {
 	}
 
 	wg := sync.WaitGroup{}
-
-	eventChan := make(chan *messages.Event, 1)
+	batchChan := make(chan source.Batch, 1)
 	runnerLoop := runner{
 		client: shipper,
 	}
@@ -63,7 +60,7 @@ func (c *Collector) Run(ctx context.Context) error {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err = runnerLoop.Run(ctx, eventChan)
+		err = runnerLoop.Run(ctx, batchChan)
 		if err != nil {
 			c.logger.Debugf("Collector; runnerLoop err ; %w", err)
 		} else {
@@ -74,7 +71,7 @@ func (c *Collector) Run(ctx context.Context) error {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		source.Run(eventChan)
+		src.Run(batchChan)
 	}()
 
 	wg.Wait()
@@ -84,15 +81,19 @@ func (c *Collector) Run(ctx context.Context) error {
 
 type runner struct {
 	client *shipper
-	// eventChan <-chan *messages.Event
 }
 
-func (l *runner) Run(ctx context.Context, eventChan <-chan *messages.Event) error {
-	// l.eventChan = eventChan
+func (l *runner) Run(ctx context.Context, batchChan <-chan source.Batch) error {
+	// Note that shipper connection is established in Collector's Run() method
+	if l.client == nil {
+		return errors.New()
+	}
+
 	for {
 		//TODO:
 		select {
-		case event := <-eventChan:
+		case batch := <-batchChan:
+			l.client.Publish()
 		case <-ctx.Done():
 		}
 	}
