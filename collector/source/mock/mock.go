@@ -22,8 +22,7 @@ type MockSource struct {
 	eventChan chan<- *messages.Event
 }
 
-func (s *MockSource) Run(eventChan chan<- *messages.Event) error {
-	s.eventChan = eventChan
+func (s *MockSource) Run(eventChan chan<- source.Batch) error {
 	return nil
 }
 
